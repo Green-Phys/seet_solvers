@@ -2,6 +2,8 @@
 // Created by iskakoff on 19/07/16.
 //
 #include <iostream>
+#include <chrono>
+#include <thread>
 
 #include <edlib/EDParams.h>
 #include <cstdlib>
@@ -18,13 +20,27 @@
 #include "edlib/MeshFactory.h"
 #include "sparse_matsubara.h"
 
+#include <Eigen/Dense>
+
+#include <alps/numeric/tensors.hpp>
 
 void define_params(alps::params &params) {
   params.define < int >("single.NEV", 1, "Number of eigenvalues to find for single EV calculations.");
   params.define < int >("single.NCV", 7, "Number of convergent values for single EV calculations.");
 }
 
+template <typename prec>
+using MMatrixX = Eigen::Map<Eigen::Matrix<prec, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>;
+using MMatrixXcd = MMatrixX<std::complex<double>>;
+template <typename prec>
+using MatrixX = Eigen::Matrix<prec, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+using MatrixXcd = MatrixX<std::complex<double>>;
+template <typename prec>
+using VectorX = Eigen::Vector<prec, Eigen::Dynamic>;
+using VectorXcd = VectorX<std::complex<double>>;
+
 int main(int argc, const char ** argv) {
+  std::this_thread::sleep_for (std::chrono::seconds(2));
 // Init MPI if enabled
 #ifdef USE_MPI
   MPI_Init(&argc, (char ***) &argv);
@@ -46,7 +62,14 @@ int main(int argc, const char ** argv) {
   if(!comm.rank())
 #endif
     ar.open(params["OUTPUT_FILE"].as<std::string>(), "w");
-// Start calculations
+  std::cout<<params<<std::endl;
+  std::system(("sync -f " + params["INPUT_FILE"].as<std::string>()).c_str());
+  {
+  //  ar.open(params["INPUT_FILE"].as<std::string>(), "r");
+  //  ar.close();
+  }
+  std::cout<<"Let's start"<<std::endl;
+  // Start calculations
   try {
     // Construct Hamiltonian object
     typedef EDLib::SRSSIAMHamiltonian HType;
@@ -100,6 +123,58 @@ int main(int argc, const char ** argv) {
       greensFunction_r.compute();
       greensFunction_r.save(ar, "results");
     }
+    {
+
+      auto G_ij = greensFunction.G_ij().data();
+      auto wn   = greensFunction.G_ij().mesh1().points();
+      alps::hdf5::archive ar2(params["INPUT_FILE"].as<std::string>(), "r");
+      alps::numerics::tensor<double, 4> G0_ij;
+      ar2["G0_imp/data"] >> G0_ij;
+      alps::numerics::tensor<double, 4> Sigma_ij(G0_ij.shape());
+      size_t nw = G0_ij.shape()[0];
+      size_t ns = G0_ij.shape()[1];
+      size_t nio = G0_ij.shape()[2];
+      for(size_t iw = 0; iw < nw; ++iw) {
+        for(size_t is = 0; is < ns; ++is) {
+          MatrixXcd G0(nio, nio);
+          MatrixXcd G(nio, nio);
+          MatrixXcd Sigma(nio, nio);
+          for(size_t io = 0; io < nio ; ++io) {
+            for(size_t jo = 0, jor = 0; jo < nio ; ++jo, jor += 2) {
+              G0(io, jo) = std::complex<double>(G0_ij(iw, is, io, jor), G0_ij(iw, is, io, jor + 1));
+              G(io, jo) = G_ij(iw, io* nio + jo, is);
+            }
+          }
+          Sigma = G0.inverse().eval() - G.inverse().eval();
+          for(size_t io = 0; io < nio ; ++io) {
+            for(size_t jo = 0, jor = 0; jo < nio; ++jo, jor += 2) {
+              Sigma_ij(iw, is, io, jor) = Sigma(io, jo).real();
+              Sigma_ij(iw, is, io, jor + 1) = Sigma(io, jo).imag();
+            }
+          }
+        }
+      }
+      alps::numerics::tensor<double, 3> Sigma_inf_ij(ns, nio, nio);
+      MatrixXcd A(3,3);
+      MatrixXcd B(3,1);
+      std::complex<double> iwn (0.0, -1./wn[nw-1]);
+      std::complex<double> iwn1(0.0, -1./wn[nw-2]);
+      std::complex<double> iwn2(0.0, -1./wn[nw-3]);
+      for(size_t is = 0; is < ns; ++is) {
+        for(size_t io = 0; io < nio ; ++io) {
+          for(size_t jo = 0, jor = 0; jo < nio; ++jo, jor += 2) {
+            A << 1.0, iwn, iwn*iwn,  1.0, iwn1, iwn1*iwn1,  1.0, iwn2, iwn2*iwn2;
+            B(0,0) = std::complex<double>(Sigma_ij(nw-1, is, io, jor), Sigma_ij(nw-1, is, io, jor + 1));
+            B(1,0) = std::complex<double>(Sigma_ij(nw-1, is, io, jor), Sigma_ij(nw-1, is, io, jor + 1));
+            B(2,0) = std::complex<double>(Sigma_ij(nw-1, is, io, jor), Sigma_ij(nw-1, is, io, jor + 1));
+            MatrixXcd X = A.colPivHouseholderQr().solve(B).eval();
+            Sigma_inf_ij(is, io, jo) = X(0,0).real();
+          }
+        }
+      }
+      ar["results/Sigma_ij"]<<Sigma_ij;
+      ar["results/Sigma_inf_ij"]<<Sigma_inf_ij;
+    }
     // Init two particle Green's function object
     //EDLib::gf::ChiLoc<HType, alps::gf::real_frequency_mesh> susc(params, ham);
     // Compute and save spin susceptibility
@@ -123,8 +198,12 @@ int main(int argc, const char ** argv) {
   if(!comm.rank())
 #endif
   ar.close();
+
+  
 #ifdef USE_MPI
   MPI_Finalize();
 #endif
+  std::system(("sync -f " + params["OUTPUT_FILE"].as<std::string>()).c_str());
+  std::this_thread::sleep_for (std::chrono::seconds(2));
   return 0;
 }

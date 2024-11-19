@@ -11,6 +11,11 @@ find_package(ALPSCore COMPONENTS params hdf5 gf REQUIRED)
 find_package(ARPACK REQUIRED)
 find_package(BLAS)
 find_package(LAPACK)
+find_package(gfmol REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(MPI REQUIRED)
+
+
 
 option(USE_MPI "Use MPI for ED" OFF)
 if(USE_MPI)
@@ -20,6 +25,7 @@ find_package(EDLib REQUIRED)
 if(USE_MPI)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_MPI")
 endif(USE_MPI)
+find_package(Eigen3 REQUIRED)
 
 set(extlibs
     ${Boost_LIBRARIES}
@@ -43,10 +49,26 @@ if(USE_MPI)
 endif(USE_MPI)
     
 
-add_executable(anderson-example Anderson.cpp)
+add_executable(ed_solver Anderson.cpp)
 
-target_link_libraries(anderson-example ${extlibs} ${parlibs})
+target_link_libraries(ed_solver ${extlibs} Eigen3::Eigen)
 
 if(USE_MPI)
-  target_link_libraries(anderson-example ${parlibs})
+  target_link_libraries(ed_solver ${parlibs})
 endif(USE_MPI)
+
+add_executable(gfmol_seet gfmol_seet.cpp)
+
+target_include_directories(gfmol_seet PUBLIC ${PROJECT_SOURCE_DIR}/deps/LeksysINI/include)
+target_include_directories(gfmol_seet PUBLIC ${PROJECT_SOURCE_DIR}/deps/args/include)
+
+target_link_libraries(gfmol_seet  alps::alps-gf gfmol::libgfmol)
+
+install(TARGETS gfmol_seet ed_solver
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+    PUBLIC_HEADER DESTINATION include
+    )
+
