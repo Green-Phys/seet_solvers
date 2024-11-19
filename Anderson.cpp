@@ -169,6 +169,9 @@ int main(int argc, const char ** argv) {
             B(2,0) = std::complex<double>(Sigma_ij(nw-1, is, io, jor), Sigma_ij(nw-1, is, io, jor + 1));
             MatrixXcd X = A.colPivHouseholderQr().solve(B).eval();
             Sigma_inf_ij(is, io, jo) = X(0,0).real();
+            for(size_t iw = 0; iw < nw; ++iw) {
+              Sigma_ij(iw, is, io, jor) -= Sigma_inf_ij(is, io, jo);
+            }
           }
         }
       }
