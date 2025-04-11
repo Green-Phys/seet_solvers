@@ -50,6 +50,7 @@ int main(int argc, const char ** argv) {
   alps::params params(argc, argv);
   EDLib::define_parameters(params);
   define_params(params);
+  params.define<bool>("COMPUTE_SIGMA", true, "Compute Self-energy.");
   params.define<bool>("REAL_FREQ", false, "Compute on real frequency grid.");
   params.define<std::string>("FREQ_FILE", "1e5_112.hdf5", "File with frequency grid.");
   params.define<std::string>("FREQ_PATH", "fermi/wsample", "File with frequency grid.");
@@ -123,7 +124,7 @@ int main(int argc, const char ** argv) {
       greensFunction_r.compute();
       greensFunction_r.save(ar, "results");
     }
-    {
+    if (params["COMPUTE_SIGMA"].as<bool>() )     {
 
       auto G_ij = greensFunction.G_ij().data();
       auto wn   = greensFunction.G_ij().mesh1().points();
