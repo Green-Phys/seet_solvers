@@ -56,3 +56,4 @@ if(USE_MPI)
   target_link_libraries(ed_solver ${parlibs})
 endif(USE_MPI)
 
+install(TARGETS ed_solver DESTINATION bin)
