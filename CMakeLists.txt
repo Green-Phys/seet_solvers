@@ -12,8 +12,6 @@ find_package(ARPACK REQUIRED)
 find_package(BLAS)
 find_package(LAPACK)
 find_package(Eigen3 REQUIRED)
-find_package(MPI REQUIRED)
-
 
 
 option(USE_MPI "Use MPI for ED" OFF)
@@ -33,9 +31,6 @@ set(extlibs
     ${ARPACK_LIB}
     ${BLAS_LIBRARIES}
     ${LAPACK_LIBRARIES}
-    ${PARPACK_LIB}
-    ${MPI_CXX_LIBRARIES}
-    ${MPI_Fortran_LIBRARIES}
     EDLib::EDLib EDLib::common-lib
     )
 
