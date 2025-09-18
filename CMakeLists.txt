@@ -6,23 +6,22 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set (CMAKE_CXX_STANDARD 11)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 find_package(ALPSCore COMPONENTS params hdf5 gf REQUIRED)
 find_package(ARPACK REQUIRED)
 find_package(BLAS)
 find_package(LAPACK)
 find_package(Eigen3 REQUIRED)
-
+include(EDLibDep)
 
 option(USE_MPI "Use MPI for ED" OFF)
 if(USE_MPI)
 find_package(MPI REQUIRED)
-endif(USE_MPI)
-find_package(EDLib REQUIRED)
-if(USE_MPI)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_MPI")
 endif(USE_MPI)
-find_package(Eigen3 REQUIRED)
+
+add_edlib_dependency()
 
 set(extlibs
     ${Boost_LIBRARIES}
@@ -41,7 +40,6 @@ if(USE_MPI)
     ${MPI_Fortran_LIBRARIES}
     )
 endif(USE_MPI)
-    
 
 add_executable(ed_solver Anderson.cpp)
 
